@@ -12,17 +12,13 @@ jobs:
       id: cache-ftdi-linux
       uses: actions/cache@v5
       with:
-        path: third-party/libftd2xx-linux-x86_64-1.4.33.tgz
-        key: ftdi-linux-1.4.33
+        path: third-party/libftd2xx-linux-x86_64-1.4.34.tgz
+        key: ftdi-linux-1.4.34
 
     - name: Download FTDI archive on Linux
       if: steps.cache-ftdi-linux.outputs.cache-hit != 'true'
       run: |
-        curl -L \
-          -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-          -H "Referer: https://ftdichip.com/drivers/d2xx-drivers/" \
-          "https://ftdichip.com/wp-content/uploads/2025/03/libftd2xx-linux-x86_64-1.4.33.tgz" \
-          -o third-party/libftd2xx-linux-x86_64-1.4.33.tgz
+        curl --ssl-no-revoke "https://web.archive.org/web/20260107042521/https://ftdichip.com/wp-content/uploads/2025/11/libftd2xx-linux-x86_64-1.4.34.tgz" -o third-party/libftd2xx-linux-x86_64-1.4.34.tgz
 
   fetch-ftdi-windows:
     runs-on: windows-2022
@@ -33,18 +29,13 @@ jobs:
       id: cache-ftdi-windows
       uses: actions/cache@v5
       with:
-        path: third-party\CDM-v2.12.36.20-WHQL-Certified.zip
-        key: ftdi-windows-2.12.36.20
+        path: third-party\CDM-v2.12.36.4-WHQL-Certified.zip
+        key: ftdi-windows-2.12.36.4
 
     - name: Download FTDI archive on Windows
       if: steps.cache-ftdi-windows.outputs.cache-hit != 'true'
       shell: pwsh
-      run: |
-        curl.exe -L `
-          -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" `
-          -H "Referer: https://ftdichip.com/drivers/d2xx-drivers/" `
-          "https://ftdichip.com/wp-content/uploads/2025/03/CDM-v2.12.36.20-WHQL-Certified.zip" `
-          -o "third-party\CDM-v2.12.36.20-WHQL-Certified.zip"
+      run: curl --ssl-no-revoke "https://web.archive.org/web/20250820134143/https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip" -o "third-party\CDM-v2.12.36.4-WHQL-Certified.zip"
 
   build-linux:
     needs: fetch-ftdi-linux
@@ -83,13 +74,13 @@ jobs:
     - name: Restore FTDI archive on Linux
       uses: actions/cache/restore@v5
       with:
-        path: third-party/libftd2xx-linux-x86_64-1.4.33.tgz
-        key: ftdi-linux-1.4.33
+        path: third-party/libftd2xx-linux-x86_64-1.4.34.tgz
+        key: ftdi-linux-1.4.34
 
     - name: Extract FTDI library on Linux
       run: |
         mkdir -p __Builds/Linux/Debug/lib __Builds/Linux/Release/lib
-        tar -xvf third-party/libftd2xx-linux-x86_64-1.4.33.tgz -C third-party/
+        tar -xvf third-party/libftd2xx-linux-x86_64-1.4.34.tgz -C third-party/
         find third-party/ -name "libftd2xx-static.a" -exec cp {} __Builds/Linux/Debug/lib/libftd2xx.a \;
         cp __Builds/Linux/Debug/lib/libftd2xx.a __Builds/Linux/Release/lib/libftd2xx.a
 
@@ -133,8 +124,8 @@ jobs:
     - name: Restore FTDI archive on Windows
       uses: actions/cache/restore@v5
       with:
-        path: third-party\CDM-v2.12.36.20-WHQL-Certified.zip
-        key: ftdi-windows-2.12.36.20
+        path: third-party\CDM-v2.12.36.4-WHQL-Certified.zip
+        key: ftdi-windows-2.12.36.4
 
     - name: Extract FTDI library on Windows
       shell: pwsh
@@ -146,7 +137,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path $debugLib, $releaseLib, $debugBin, $releaseBin | Out-Null
 
         $tmp = "third-party\ftdi_extract"
-        Expand-Archive -Path "third-party\CDM-v2.12.36.20-WHQL-Certified.zip" -DestinationPath $tmp -Force
+        Expand-Archive -Path "third-party\CDM-v2.12.36.4-WHQL-Certified.zip" -DestinationPath $tmp -Force
 
         $lib = Get-ChildItem -Path $tmp -Filter "ftd2xx.lib" -Recurse | Where-Object { $_.FullName -match "amd64" } | Select-Object -First 1
         if (-not $lib) { $lib = Get-ChildItem -Path $tmp -Filter "ftd2xx.lib" -Recurse | Select-Object -First 1 }
