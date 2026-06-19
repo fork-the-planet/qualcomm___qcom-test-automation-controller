@@ -1,30 +1,5 @@
-// Confidential and Proprietary Qualcomm Technologies, Inc.
-
-// NO PUBLIC DISCLOSURE PERMITTED:  Please report postings of this software on public servers or websites
-// to: DocCtrlAgent@qualcomm.com.
-
-// RESTRICTED USE AND DISCLOSURE:
-// This software contains confidential and proprietary information and is not to be used, copied, reproduced, modified
-// or distributed, in whole or in part, nor its contents revealed in any manner, without the express written permission
-// of Qualcomm Technologies, Inc.
-
-// Qualcomm is a trademark of QUALCOMM Incorporated, registered in the United States and other countries. All
-// QUALCOMM Incorporated trademarks are used with permission.
-
-// This software may be subject to U.S. and international export, re-export, or transfer laws.  Diversion contrary to U.S.
-// and international law is strictly prohibited.
-
-// Qualcomm Technologies, Inc.
-// 5775 Morehouse Drive
-// San Diego, CA 92121 U.S.A.
-// Copyright 2018-2025 Qualcomm Technologies, Inc.
-// All rights reserved.
-// Qualcomm Technologies Confidential and Proprietary
-
-/*
-	Author: Michael Simpson (msimpson@qti.qualcomm.com)
-			Biswajit Roy (biswroy@qti.qualcomm.com)
-*/
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
 
 #include "PlatformConfiguration.h"
 
@@ -57,7 +32,6 @@ const QString kAuthor(QStringLiteral("author"));
 const QString kDescription(QStringLiteral("description"));
 const QString kPlatformType(QStringLiteral("platform_type"));
 const QString kFileVersion(QStringLiteral("fileVersion"));
-const QString kPineVersion(QStringLiteral("pineVersion"));
 const QString kPlatformId(QStringLiteral("platform_id"));
 const QString kCreationDate(QStringLiteral("creation_date"));
 const QString kModifyDate(QStringLiteral("modification_date"));
@@ -439,16 +413,6 @@ quint32 _PlatformConfiguration::fileVersion()
 	return _fileVersion;
 }
 
-QString _PlatformConfiguration::getPineVersion()
-{
-	return QString::number(_pineVersion);
-}
-
-void _PlatformConfiguration::setPineVersion(quint32 pineVersion)
-{
-	_pineVersion = pineVersion;
-}
-
 QString _PlatformConfiguration::getPlatformString()
 {
 	return debugBoardTypeToString(_platform);
@@ -744,7 +708,6 @@ bool _PlatformConfiguration::setButtonTooltip(HashType hash, const QString &tool
 	}
 	return result;
 }
-
 
 HashType _PlatformConfiguration::addButtonCommand(const QString& labelName, const QString& tabName, const QString &command)
 {
@@ -1157,7 +1120,6 @@ void _PlatformConfiguration::save()
 			}
 		}
 	}
-	copyToPineDataPath(targetFilePath);
 }
 
 bool _PlatformConfiguration::read(QJsonObject& parentLevel)
@@ -1195,12 +1157,6 @@ bool _PlatformConfiguration::read(QJsonObject& parentLevel)
 	if (jsonValue.isNull() == false)
 	{
 		_fileVersion = static_cast<quint32>(jsonValue.toInt());
-	}
-
-	jsonValue = parentLevel.value(kPineVersion);
-	if (jsonValue.isNull() == false)
-	{
-		_pineVersion = static_cast<quint32>(jsonValue.toInt());
 	}
 
 	jsonValue = parentLevel.value(kCreationDate);
@@ -1337,7 +1293,6 @@ void _PlatformConfiguration::write(QJsonObject& parentLevel)
 	parentLevel[kAuthor] = _author;
 	parentLevel[kDescription] = _description;
 	parentLevel[kFileVersion] = static_cast<int>(++_fileVersion);
-	parentLevel[kPineVersion] = static_cast<int>(_pineVersion);
 	parentLevel[kCreationDate] = _creationDate;
 	parentLevel[kModifyDate] = _modifyDate;
 	parentLevel[kPlatformType] = debugBoardTypeToString(_platform);
@@ -1472,25 +1427,6 @@ void _PlatformConfiguration::initialize()
 
 		_classicButtons[button._hash] = button;
 	}
-}
-
-void _PlatformConfiguration::copyToPineDataPath(const QString& savePath)
-{
-#ifdef Q_OS_WIN
-	QString pinePath{"C:/Program Files (x86)/Qualcomm/Shared/Alpaca"};
-	QString fileName = savePath.split("/").back();
-	QFileInfo configFile{pinePath + QDir::separator() + fileName};
-
-	// If the Shared/Alpaca directory does not exist, create it
-	QDir().mkpath(pinePath);
-	
-	// If the file already exists, remove it
-	if (configFile.exists())
-		QFile(configFile.filePath()).remove();
-
-	// Copy the updated configuration
-	QFile::copy(savePath, configFile.absoluteFilePath());
-#endif
 }
 
 void _PlatformConfiguration::defaultAlpacaScript()
