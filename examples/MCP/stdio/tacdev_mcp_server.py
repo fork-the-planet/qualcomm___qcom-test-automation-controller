@@ -3,62 +3,27 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
-import logging
-import logging.handlers
-from pathlib import Path
+"""
+MCP server for TACDev using stdio transport.
 
-import yaml
+The server is launched automatically by the client as a subprocess — there is
+no standalone process to start. Each client gets its own server instance.
+"""
+
 import TACDev
-from fastmcp import FastMCP, Context
-from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
+from fastmcp import FastMCP
 
-import mcp.types as mt
-
-# --------------------------------------------------------------------------- #
-# Config
-# --------------------------------------------------------------------------- #
-_CONFIG_PATH = Path(__file__).with_name("config.yaml")
-
-def _load_config() -> dict:
-    with open(_CONFIG_PATH) as f:
-        return yaml.safe_load(f)
-
-cfg = _load_config()
-
-# --------------------------------------------------------------------------- #
-# Logging
-# --------------------------------------------------------------------------- #
-def _setup_logging() -> logging.Logger:
-    log_cfg = cfg["logging"]
-    logger = logging.getLogger("tacdev_mcp")
-    logger.setLevel(log_cfg["level"].upper())
-
-    handler = logging.handlers.RotatingFileHandler(
-        log_cfg["file"],
-        maxBytes=log_cfg["max_bytes"],
-        backupCount=log_cfg["backup_count"],
-    )
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    logger.addHandler(handler)
-    return logger
-
-log = _setup_logging()
-
-# --------------------------------------------------------------------------- #
-# Device ownership registry
-# --------------------------------------------------------------------------- #
-device_ownership: dict[str, str] = {}
-session_handles: dict[str, list[int]] = {}
 handles: dict[int, TACDev.TACDevice] = {}
 _next_handle = 1
 
+mcp = FastMCP("TACDev-MCP")
 
-def _register(device: TACDev.TACDevice, session_id: str) -> int:
+
+def _register(device: TACDev.TACDevice) -> int:
     global _next_handle
     handle = _next_handle
     _next_handle += 1
     handles[handle] = device
-    session_handles.setdefault(session_id, []).append(handle)
     return handle
 
 
@@ -69,62 +34,13 @@ def _get_device(handle: int) -> TACDev.TACDevice:
     return device
 
 
-def _release_session(session_id: str) -> None:
-    for handle in session_handles.pop(session_id, []):
-        device = handles.pop(handle, None)
-        if device:
-            port = next((p for p, s in device_ownership.items() if s == session_id), None)
+def _release_all() -> None:
+    for handle, device in list(handles.items()):
+        try:
             device.Close()
-            if port:
-                del device_ownership[port]
-            log.info("session=%s handle=%d auto-closed on disconnect", session_id, handle)
-
-
-def _device_list() -> dict:
-    count = TACDev.GetDeviceCount()
-    available = []
-    in_use = []
-    for i in range(count):
-        d = TACDev.GetDevice(i)
-        if not d:
-            continue
-        port = d.PortName()
-        entry = {"port": port, "description": d.Description(), "serial": d.SerialNumber()}
-        if port in device_ownership:
-            in_use.append({**entry, "owned_by": device_ownership[port]})
-        else:
-            available.append(entry)
-    return {"available": available, "in_use": in_use}
-
-
-# --------------------------------------------------------------------------- #
-# Session connect middleware
-# --------------------------------------------------------------------------- #
-class SessionMiddleware(Middleware):
-    async def on_initialize(
-        self,
-        context: MiddlewareContext[mt.InitializeRequest],
-        call_next: CallNext,
-    ):
-        result = await call_next(context)
-        ctx = context.fastmcp_context
-        if ctx:
-            session_id = ctx.session_id
-            log.info("session=%s connected", session_id)
-            devices = _device_list()
-            await ctx.send_notification(
-                mt.ResourceListChangedNotification(
-                    method="notifications/resources/list_changed"
-                )
-            )
-            log.info("session=%s device list pushed: %s", session_id, devices)
-        return result
-
-
-# --------------------------------------------------------------------------- #
-# MCP server
-# --------------------------------------------------------------------------- #
-mcp = FastMCP("TACDev", middleware=[SessionMiddleware()])
+        except Exception:
+            pass
+    handles.clear()
 
 
 # --------------------------------------------------------------------------- #
@@ -132,7 +48,13 @@ mcp = FastMCP("TACDev", middleware=[SessionMiddleware()])
 # --------------------------------------------------------------------------- #
 @mcp.tool()
 def list_devices() -> dict:
-    return _device_list()
+    count = TACDev.GetDeviceCount()
+    available = []
+    for i in range(count):
+        d = TACDev.GetDevice(i)
+        if d:
+            available.append({"port": d.PortName(), "description": d.Description(), "serial": d.SerialNumber()})
+    return {"available": available, "in_use": []}
 
 
 # --------------------------------------------------------------------------- #
@@ -187,37 +109,22 @@ def get_port_data(device_index: int) -> dict:
 # Tools: handle management
 # --------------------------------------------------------------------------- #
 @mcp.tool()
-async def open_handle_by_description(port_name: str, ctx: Context) -> dict:
-    session_id = ctx.session_id
-    if port_name in device_ownership:
-        owner = device_ownership[port_name]
-        log.warning("session=%s tried to open %s already owned by %s", session_id, port_name, owner)
-        raise RuntimeError(f"Device '{port_name}' is already in use by session {owner}.")
+def open_handle_by_description(port_name: str) -> dict:
     count = TACDev.GetDeviceCount()
     for i in range(count):
         device = TACDev.GetDevice(i)
         if device and device.PortName() == port_name:
             if not device.Open():
                 raise RuntimeError(f"Failed to open device '{port_name}'.")
-            handle = _register(device, session_id)
-            device_ownership[port_name] = session_id
-            log.info("session=%s opened %s handle=%d", session_id, port_name, handle)
-            return {"handle": handle}
+            return {"handle": _register(device)}
     raise RuntimeError(f"No device with port name '{port_name}'.")
 
 
 @mcp.tool()
-async def close_tac_handle(handle: int, ctx: Context) -> dict:
-    session_id = ctx.session_id
+def close_tac_handle(handle: int) -> dict:
     device = _get_device(handle)
-    port = next((p for p, s in device_ownership.items() if s == session_id), None)
     device.Close()
     del handles[handle]
-    if handle in session_handles.get(session_id, []):
-        session_handles[session_id].remove(handle)
-    if port:
-        del device_ownership[port]
-    log.info("session=%s closed handle=%d port=%s", session_id, handle, port)
     return {"success": True}
 
 
@@ -580,19 +487,14 @@ def boot_to_secondary_edl_button(handle: int) -> dict:
     return {"success": True}
 
 
+
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
-    server_cfg = cfg["server"]
-    log.info("Starting TACDev MCP server on %s:%d", server_cfg["host"], server_cfg["port"])
     try:
-        mcp.run(
-            transport="sse",
-            host=server_cfg["host"],
-            port=server_cfg["port"],
-        )
+        mcp.run(transport="stdio")
     except KeyboardInterrupt:
         pass
     finally:
-        log.info("Server stopped.")
+        _release_all()
