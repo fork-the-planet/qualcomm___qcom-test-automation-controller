@@ -1,43 +1,44 @@
 #!/bin/bash
 
-# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted (subject to the limitations in the
-# disclaimer below) provided that the following conditions are met:
-#     
-#     * Redistributions of source code must retain the above copyright
-#         notice, this list of conditions and the following disclaimer.
-#     
-#     * Redistributions in binary form must reproduce the above
-#         copyright notice, this list of conditions and the following
-#         disclaimer in the documentation and/or other materials provided
-#         with the distribution.
-#     
-#     * Neither the name of Qualcomm Technologies, Inc. nor the names of its
-#         contributors may be used to endorse or promote products derived
-#         from this software without specific prior written permission.
-#     
-# NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
-# GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
-# HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
-# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
 
 # Author: Biswajit Roy (biswroy@qti.qualcomm.com)
 
 set -e
 
 if [ -z "$QTBIN" ]; then
-    echo "Set QTBIN first"
+    echo ""
+    echo "ERROR: QTBIN is not set."
+    echo "       QTBIN must point to the Qt bin directory, e.g.:"
+    echo "         export QTBIN=/path/to/Qt/<version>/gcc_64/bin"
+    echo "       Then re-run this script."
+    exit 1
+fi
+
+if [ ! -d "$QTBIN" ]; then
+    echo ""
+    echo "ERROR: QTBIN directory does not exist: $QTBIN"
+    echo "       Install Qt 6.9+ via the Qt Online Installer (https://www.qt.io/download-qt-installer-oss)"
+    echo "       and include the GCC 64-bit component, then update QTBIN."
+    exit 1
+fi
+
+if ! echo "$QTBIN" | grep -q "gcc_64"; then
+    echo ""
+    echo "ERROR: QTBIN does not point to a GCC 64-bit Qt installation."
+    echo "       QTBIN is currently: $QTBIN"
+    echo "       A Linux build requires the Qt GCC 64-bit component. QTBIN must contain 'gcc_64', e.g.:"
+    echo "         export QTBIN=/path/to/Qt/<version>/gcc_64/bin"
+    exit 1
+fi
+
+if ! command -v ninja &>/dev/null; then
+    echo ""
+    echo "ERROR: ninja not found in PATH."
+    echo "       Install ninja via your package manager, e.g.:"
+    echo "         sudo apt install ninja-build"
+    echo "       Or via the Qt installer (Tools > Ninja)."
     exit 1
 fi
 
@@ -47,11 +48,20 @@ export PATH="$QTBIN:$PATH"
 rm -rf build __Builds
 
 # Debug
-cmake -S . -B build/Debug -DCMAKE_PREFIX_PATH="$(dirname "$QTBIN")" -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build/Debug \
+    -DCMAKE_PREFIX_PATH="$(dirname "$QTBIN")" \
+    -DCMAKE_COLOR_DIAGNOSTICS=ON \
+    -DCMAKE_GENERATOR=Ninja \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_CXX_FLAGS_INIT=-DQT_QML_DEBUG
 cmake --build build/Debug
 
 # Release
-cmake -S . -B build/Release -DCMAKE_PREFIX_PATH="$(dirname "$QTBIN")" -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build/Release \
+    -DCMAKE_PREFIX_PATH="$(dirname "$QTBIN")" \
+    -DCMAKE_COLOR_DIAGNOSTICS=ON \
+    -DCMAKE_GENERATOR=Ninja \
+    -DCMAKE_BUILD_TYPE=Release
 cmake --build build/Release
 
 echo "Check __Builds directory"

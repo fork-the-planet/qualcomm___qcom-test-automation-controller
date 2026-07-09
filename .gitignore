@@ -23,6 +23,13 @@ ui_*
 **/*/dist
 __pycache__/
 .pytest_cache/
+*.egg-info/
+*.pyc
+*.pyo
+*.pyd
+
+# MCP logs
+examples/MCP/**/*.log
 
 # Qt build directory
 __Builds/
